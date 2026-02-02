@@ -13,15 +13,21 @@ struct Elevator {
     image_loaded: bool,
     texture_handle: Option<TextureHandle>,
     elevator: Elevator_Object,
+    current_floor: usize,
+    target_floor: usize,
+    floor_positions: Vec<f32>,
 }
 
 impl Default for Elevator {
     fn default() -> Self {
         Self {
-            run: true,
+            run: false,
             image_loaded: false,
             texture_handle: None,
             elevator: Elevator_Object::new(1, 0.0, 0.0),
+            current_floor: 0,
+            target_floor: 0,
+            floor_positions: vec![0.0, 200.0, 400.0, 600.0], // Ground, 1, 2, 3
         }
     }
 }
@@ -53,13 +59,42 @@ impl eframe::App for Elevator {
             }
         }
 
+        // Elevator simulation logic
+        if self.run {
+            let current_pos = self.floor_positions[self.current_floor];
+            let target_pos = self.floor_positions[self.target_floor];
+            
+            if (current_pos - target_pos).abs() > 2.0 {
+                // Move elevator towards target floor
+                let speed = 2.0;
+                if current_pos < target_pos {
+                    self.floor_positions[self.current_floor] += speed;
+                } else {
+                    self.floor_positions[self.current_floor] -= speed;
+                }
+            } else {
+                // Reached target floor, pick a new random target
+                self.current_floor = self.target_floor;
+                self.floor_positions[self.current_floor] = target_pos;
+                self.target_floor = rand::random::<usize>() % 4;
+            }
+        }
+
         egui::TopBottomPanel::top("⚙️ Elevator - Visual Analyze").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("⚙️ Elevator - Visual And Analyze");
                 ui.separator();
-                ui.checkbox(&mut self.run, "🕹️ Start");
+                if ui.checkbox(&mut self.run, "🕹️ Start").changed() {
+                    if self.run {
+                        // Start simulation - pick a random target floor
+                        self.target_floor = rand::random::<usize>() % 4;
+                    }
+                }
+                ui.label(format!("Floor: {} → {}", 
+                    ["G", "1", "2", "3"][self.current_floor],
+                    ["G", "1", "2", "3"][self.target_floor]));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label("🏭 Minimal Working...");
+                    ui.label("🏭 Interactive Elevator Simulation");
                 });
             });
         });
@@ -74,7 +109,7 @@ impl eframe::App for Elevator {
                 draw_grid_lines(ui, available_rect, grid_size);
                 draw_floors(ui, available_rect, grid_size);
 
-                let y = available_rect.min.y + 0.0;
+                let y = available_rect.min.y + self.floor_positions[self.current_floor];
                 self.elevator.set_position(600.0, y);
                 let widget = Elevator_Widget::new(&mut self.elevator, Vec2::new(150.0, 195.0));
                 ui.add(widget);
