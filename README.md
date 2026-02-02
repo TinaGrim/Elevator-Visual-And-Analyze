@@ -1,4 +1,4 @@
-# Elevator Visual and Analyze
+# Elevator Visualization and Analysis
 
 A visual elevator simulator built with Rust using the [egui](https://github.com/emilk/egui) immediate mode GUI framework.
 
