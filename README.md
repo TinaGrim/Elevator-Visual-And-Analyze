@@ -16,6 +16,9 @@ This application provides a visual representation of an elevator system with:
 - **Floor Display**: Shows floor labels (Ground, 1, 2, 3)
 - **Grid Layout**: Visual grid representing the building structure
 - **Interactive UI**: Start/stop controls for the elevator simulation
+- **Automated Movement**: Elevator automatically moves between randomly selected floors
+- **Real-time Display**: Shows current floor and target floor in the UI
+- **Door Control**: Click on the elevator to toggle door open/close (console output)
 
 ## Prerequisites
 
@@ -65,6 +68,12 @@ To run the elevator simulator:
 cargo run
 ```
 
+Or use the provided script:
+
+```bash
+./run_gui.sh
+```
+
 Or, if you've built the release version:
 
 ```bash
@@ -72,6 +81,14 @@ cargo run --release
 ```
 
 The application will open a GUI window displaying the elevator visualization.
+
+### How to Use
+
+1. **Start the Simulation**: Check the "🕹️ Start" checkbox at the top of the window
+2. **Watch the Elevator**: The elevator will automatically move between randomly selected floors
+3. **View Status**: The current floor and target floor are displayed in the top panel (e.g., "Floor: G → 2")
+4. **Toggle Door**: Click directly on the elevator to open/close the door (status shown in console)
+5. **Stop the Simulation**: Uncheck the "Start" checkbox to pause the elevator
 
 ## Project Structure
 
@@ -98,8 +115,10 @@ The application will open a GUI window displaying the elevator visualization.
 
 - The application uses a custom elevator image (`src/elevator.png`)
 - The simulation displays a grid with floor markers
-- The elevator position and movement logic can be extended
-- Currently in minimal working state with room for additional features
+- The elevator automatically selects random target floors and moves between them
+- Movement speed is set to 2.0 pixels per frame for smooth animation
+- The simulation can be paused/resumed using the Start checkbox
+- Click interactions on the elevator widget toggle the door state
 
 ## License
 
