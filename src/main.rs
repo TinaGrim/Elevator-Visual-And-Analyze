@@ -15,8 +15,11 @@ struct Elevator {
     elevator: Elevator_Object,
     current_floor: usize,
     target_floor: usize,
+    elevator_y_position: f32,
     floor_positions: Vec<f32>,
 }
+
+const FLOOR_LABELS: [&str; 4] = ["G", "1", "2", "3"];
 
 impl Default for Elevator {
     fn default() -> Self {
@@ -27,6 +30,7 @@ impl Default for Elevator {
             elevator: Elevator_Object::new(1, 0.0, 0.0),
             current_floor: 0,
             target_floor: 0,
+            elevator_y_position: 0.0,
             floor_positions: vec![0.0, 200.0, 400.0, 600.0], // Ground, 1, 2, 3
         }
     }
@@ -61,21 +65,21 @@ impl eframe::App for Elevator {
 
         // Elevator simulation logic
         if self.run {
-            let current_pos = self.floor_positions[self.current_floor];
+            let current_pos = self.elevator_y_position;
             let target_pos = self.floor_positions[self.target_floor];
             
             if (current_pos - target_pos).abs() > 2.0 {
                 // Move elevator towards target floor
                 let speed = 2.0;
                 if current_pos < target_pos {
-                    self.floor_positions[self.current_floor] += speed;
+                    self.elevator_y_position += speed;
                 } else {
-                    self.floor_positions[self.current_floor] -= speed;
+                    self.elevator_y_position -= speed;
                 }
             } else {
                 // Reached target floor, pick a new random target
                 self.current_floor = self.target_floor;
-                self.floor_positions[self.current_floor] = target_pos;
+                self.elevator_y_position = target_pos;
                 self.target_floor = rand::random::<usize>() % 4;
             }
         }
@@ -91,8 +95,8 @@ impl eframe::App for Elevator {
                     }
                 }
                 ui.label(format!("Floor: {} → {}", 
-                    ["G", "1", "2", "3"][self.current_floor],
-                    ["G", "1", "2", "3"][self.target_floor]));
+                    FLOOR_LABELS[self.current_floor],
+                    FLOOR_LABELS[self.target_floor]));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label("🏭 Interactive Elevator Simulation");
                 });
@@ -109,7 +113,7 @@ impl eframe::App for Elevator {
                 draw_grid_lines(ui, available_rect, grid_size);
                 draw_floors(ui, available_rect, grid_size);
 
-                let y = available_rect.min.y + self.floor_positions[self.current_floor];
+                let y = available_rect.min.y + self.elevator_y_position;
                 self.elevator.set_position(600.0, y);
                 let widget = Elevator_Widget::new(&mut self.elevator, Vec2::new(150.0, 195.0));
                 ui.add(widget);
