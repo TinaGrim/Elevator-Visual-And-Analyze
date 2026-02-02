@@ -1,0 +1,11 @@
+[package]
+name = "Elevator_Visual_And_Analyze"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.27.0"
+egui_extras = {version = "0.27.0", features = ["image"]}
+egui = "0.27.0"
+rand = "0.8.5"
+
