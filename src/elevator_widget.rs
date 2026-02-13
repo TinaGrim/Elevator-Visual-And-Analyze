@@ -1,31 +1,25 @@
-use crate::elevator::{Door, Elevator_Object};
+use crate::elevator::{Door, ElevatorObject};
 use egui::{Align2, Color32, FontFamily, FontId, Rect, Response, Sense, Vec2, Widget};
 
-enum Action_Status {
-    STOP,
-    IDLE,
-    UP,
-    DOWN,
-}
 
 #[derive(Debug)]
-pub struct Elevator_Widget<'a> {
-    Object: &'a mut Elevator_Object,
-    Door: bool,
+pub struct ElevatorWidget<'a> {
+    object: &'a mut ElevatorObject,
+    door: bool,
     size: Vec2,
 }
-impl<'a> Elevator_Widget<'a> {
-    pub fn new(object: &'a mut Elevator_Object, size: Vec2) -> Self {
+impl<'a> ElevatorWidget<'a> {
+    pub fn new(object: &'a mut ElevatorObject, size: Vec2) -> Self {
         Self {
-            Object: object,
-            Door: false,
-            size: size,
+            object,
+            door: false,
+            size,
         }
     }
 }
-impl<'a> Widget for Elevator_Widget<'a> {
+impl<'a> Widget for ElevatorWidget<'a> {
     fn ui(self, ui: &mut egui::Ui) -> Response {
-        let (x, y) = self.Object.get_position();
+        let (x, y) = self.object.get_position();
         let position = egui::Pos2::new(x, y);
 
         let rect = egui::Rect::from_min_size(position, self.size);
@@ -33,13 +27,13 @@ impl<'a> Widget for Elevator_Widget<'a> {
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let painter = ui.painter();
         if response.clicked() {
-            match self.Object.toggle_door(){
-                Door::CLOSE => println!("Elevator Door : CLOSED"),
-                Door::OPEN => println!("Elevator Door : OPENED"),
+            match self.object.toggle_door() {
+                Door::Close => println!("Elevator Door : CLOSED"),
+                Door::Open => println!("Elevator Door : OPENED"),
             }
         }
 
-        if let Some(image) = self.Object.texture_id() {
+        if let Some(image) = self.object.texture_id() {
             painter.image(
                 image,
                 rect,

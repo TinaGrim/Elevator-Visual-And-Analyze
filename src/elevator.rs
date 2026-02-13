@@ -1,21 +1,21 @@
 use egui::{self, Options, TextureHandle, TextureId, Vec2};
 use std::fmt;
 #[derive(Debug)]
-pub enum Action_Status {
-    STOP,
-    IDLE,
-    UP,
-    DOWN,
+pub enum ActionStatus {
+    Stop,
+    Idle,
+    Up,
+    Down,
 }
 #[derive(Debug, Clone)]
 pub enum Door {
-    CLOSE,
-    OPEN,
+    Close,
+    Open,
 }
 // #[derive(Debug)]
-pub struct Elevator_Object {
+pub struct ElevatorObject {
     id: u32,
-    Status: Action_Status,
+    status: ActionStatus,
     door: Door,
     // position
     x: f32,
@@ -23,55 +23,55 @@ pub struct Elevator_Object {
     velocity_x: f32,
     velocity_y: f32,
 
-    Speed: f32,
-    Image: Option<TextureHandle>,
+    speed: f32,
+    image: Option<TextureHandle>,
 }
-impl fmt::Debug for Elevator_Object {
+impl fmt::Debug for ElevatorObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Elevator_Object")
             .field("Id", &self.id)
-            .field("Status", &self.Status)
+            .field("Status", &self.status)
             .field("Door", &self.door)
             .field("x", &self.x)
             .field("y", &self.y)
             .field("velocity_x", &self.velocity_x)
             .field("velocity_y", &self.velocity_y)
-            .field("Speed", &self.Speed)
-            .field("Image", &self.Image.is_some()) // Show bool instead
+            .field("Speed", &self.speed)
+            .field("Image", &self.image.is_some()) // Show bool instead
             .finish()
     }
 }
-impl Elevator_Object {
+impl ElevatorObject {
     pub fn new(id: u32, x: f32, y: f32) -> Self {
         Self {
-            id: id,
-            Status: Action_Status::IDLE,
-            door: Door::CLOSE,
-            x: x,
-            y: y,
+            id,
+            status: ActionStatus::Idle,
+            door: Door::Close,
+            x,
+            y,
             velocity_x: 0.0,
             velocity_y: 0.0,
-            Speed: 0.0,
-            Image: None,
+            speed: 0.0,
+            image: None,
         }
     }
-    pub fn set_position(&mut self, x: f32, y: f32) {
-        self.x = x;
-        self.y = y;
+    pub fn set_position(&mut self, x: f32, y: f32, available: egui::Rect) {
+        self.x = available.min.x + x;
+        self.y = available.min.y + y;
     }
     pub fn get_position(&self) -> (f32, f32) {
         (self.x, self.y)
     }
     pub fn set_image(&mut self, image: TextureHandle) {
-        self.Image = Some(image);
+        self.image = Some(image);
     }
     pub fn texture_id(&self) -> Option<egui::TextureId> {
-        self.Image.as_ref().map(|tex| tex.id())
+        self.image.as_ref().map(|tex| tex.id())
     }
     pub fn toggle_door(&mut self) -> Door {
         self.door = match self.door {
-            Door::CLOSE => Door::OPEN,
-            Door::OPEN => Door::CLOSE,
+            Door::Close => Door::Open,
+            Door::Open => Door::Close,
         };
         self.door.clone()
     }

@@ -1,18 +1,28 @@
 mod elevator;
 mod elevator_widget;
+
+mod human;
+mod human_widget;
+
 use eframe::egui;
 use egui::{
     Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, vec2,
 };
 
-use crate::{elevator::Elevator_Object, elevator_widget::Elevator_Widget};
+use crate::{elevator::ElevatorObject, elevator_widget::ElevatorWidget};
+use crate::{human::HumanObject, human_widget::HumanWidget};
+
 use egui_extras::install_image_loaders;
 
 struct Elevator {
     run: bool,
     image_loaded: bool,
-    texture_handle: Option<TextureHandle>,
-    elevator: Elevator_Object,
+    elevator_texture_handle: Option<TextureHandle>,
+    human_texture_handle: Option<TextureHandle>,
+    elevator: ElevatorObject,
+    elevator_rect: Vec2,
+    human: HumanObject,
+    floors: Vec<String>,
 }
 
 impl Default for Elevator {
@@ -20,8 +30,17 @@ impl Default for Elevator {
         Self {
             run: true,
             image_loaded: false,
-            texture_handle: None,
-            elevator: Elevator_Object::new(1, 0.0, 0.0),
+            elevator_texture_handle: None,
+            human_texture_handle: None,
+            elevator: ElevatorObject::new(1, 0.0, 0.0),
+            elevator_rect: Vec2::new(150.0, 195.0),
+            human: HumanObject::new("Tina".to_string(), 0.0, 0.0),
+            floors: vec![
+                "G".to_string(),
+                "1".to_string(),
+                "2".to_string(),
+                "3".to_string(),
+            ],
         }
     }
 }
@@ -30,32 +49,18 @@ impl std::fmt::Debug for Elevator {
         f.debug_struct("Elevator")
             .field("run", &self.run)
             .field("image_loaded", &self.image_loaded)
-            .field("texture_handle", &self.texture_handle.is_some())
+            .field("texture_handle", &self.elevator_texture_handle.is_some())
+            .field("Human_hanle", &self.human_texture_handle.is_some())
             .field("elevator object", &self.elevator)
+            .field("elevator rect", &self.elevator_rect)
             .finish()
     }
 }
 impl eframe::App for Elevator {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if !self.image_loaded {
-            let image_bytes = include_bytes!("elevator.png");
-            let color_image = egui_extras::image::load_image_bytes(image_bytes)
-                .expect("Failed to load elevator image");
-            self.texture_handle = Some(ctx.load_texture(
-                "elevator_texture",
-                color_image,
-                egui::TextureOptions::default(),
-            ));
-            self.image_loaded = true;
-
-            if let Some(texture) = &self.texture_handle {
-                self.elevator.set_image(texture.clone());
-            }
-        }
-
-        egui::TopBottomPanel::top("⚙️ Elevator - Visual Analyze").show(ctx, |ui| {
+        egui::TopBottomPanel::top("⚙️ Elevator - Visualization Analysis").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("⚙️ Elevator - Visual And Analyze");
+                ui.heading("⚙️ Elevator - Visualization And Analysis");
                 ui.separator();
                 ui.checkbox(&mut self.run, "🕹️ Start");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -66,21 +71,86 @@ impl eframe::App for Elevator {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::Frame::canvas(ui.style()).show(ui, |ui| {
                 let available_rect = ui.available_rect_before_wrap();
+                if !self.image_loaded {
+                    let elevator_image_byes = include_bytes!("elevator.png");
+                    let human_image_bytes = include_bytes!("human.png");
 
+                    let elevator_color_image = egui_extras::image::load_image_bytes(elevator_image_byes)
+                        .expect("Failed to load elevator image");
+                    let human_color_image = egui_extras::image::load_image_bytes(human_image_bytes)
+                        .expect("Failed to load human image");
+                    self.elevator_texture_handle = Some(ctx.load_texture(
+                        "elevator_texture",
+                        elevator_color_image,
+                        egui::TextureOptions::default(),
+                    ));
+                    self.human_texture_handle = Some(ctx.load_texture(
+                        "human_texture", 
+                        human_color_image, 
+                        egui::TextureOptions::default()));
+                    self.image_loaded = true;
+
+                    if let Some(texture) = &self.elevator_texture_handle {
+                        self.elevator.set_image(texture.clone());
+                    }
+                    change_floor(&mut self.elevator, "G", available_rect);
+                }
+
+                // Make those frame eaiser
                 ui.allocate_painter(available_rect.size(), Sense::click_and_drag());
 
                 let grid_size = 200.0;
-
                 draw_grid_lines(ui, available_rect, grid_size);
-                draw_floors(ui, available_rect, grid_size);
+                draw_floors(ui, self.floors.clone(), available_rect, grid_size);
 
-                let y = available_rect.min.y + 0.0;
-                self.elevator.set_position(600.0, y);
-                let widget = Elevator_Widget::new(&mut self.elevator, Vec2::new(150.0, 195.0));
+                ui.input(|input| {
+                    for event in &input.events {
+                        if let egui::Event::Key {
+                            key,
+                            pressed: true,
+                            repeat: false,
+                            ..
+                        } = event
+                        {
+                            match key {
+                                egui::Key::Num1 => {
+                                    change_floor(&mut self.elevator, "1", available_rect);
+                                    println!("Elevator set floor -> 1\n")
+                                }
+                                egui::Key::Num2 => {
+                                    change_floor(&mut self.elevator, "2", available_rect);
+                                    println!("Elevator set floor -> 2\n")
+                                }
+                                egui::Key::Num3 => {
+                                    change_floor(&mut self.elevator, "3", available_rect);
+                                    println!("Elevator set floor -> 3\n")
+                                }
+                                egui::Key::G => {
+                                    change_floor(&mut self.elevator, "G", available_rect);
+                                    println!("Elevator set floor -> G\n")
+                                }
+
+                                _ => println!("Usage: please type the floor for destination. ep(1, 2, 3, G) \n"),
+                            }
+                        }
+                    }
+                });
+
+                let widget = ElevatorWidget::new(&mut self.elevator, self.elevator_rect);
                 ui.add(widget);
             });
         });
+
         ctx.request_repaint();
+    }
+}
+fn change_floor(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect) {
+    match floor {
+        "3" => elevator.set_position(500.0, 0.0, available_rect),
+        "2" => elevator.set_position(500.0, 200.0, available_rect),
+        "1" => elevator.set_position(500.0, 400.0, available_rect),
+        "G" => elevator.set_position(500.0, 600.0, available_rect),
+        _ => (),
     }
 }
 fn draw_grid_lines(ui: &mut egui::Ui, available_rect: egui::Rect, grid_size: f32) {
@@ -99,8 +169,7 @@ fn draw_grid_lines(ui: &mut egui::Ui, available_rect: egui::Rect, grid_size: f32
         y += grid_size;
     }
 }
-fn draw_floors(ui: &mut egui::Ui, available_rect: egui::Rect, grid_size: f32) {
-    let floors = ["G", "1", "2", "3"];
+fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rect, grid_size: f32) {
     let mut start_floor: f32 = available_rect.height() - (grid_size / 2.0);
 
     for floor in &floors {
@@ -124,9 +193,9 @@ fn draw_floors(ui: &mut egui::Ui, available_rect: egui::Rect, grid_size: f32) {
 }
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
-    println!("Elevator - Visual and Analyze\n");
+    println!("Elevator - Visualization and Analysis\n");
     eframe::run_native(
-        "Elevator - Visual and Analyze\n",
+        "Elevator - Visualization and Analysis\n",
         options,
         Box::new(|cc| {
             install_image_loaders(&cc.egui_ctx);
