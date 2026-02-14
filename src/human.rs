@@ -38,7 +38,16 @@ impl HumanObject {
             image: None,
         }
     }
+    pub fn set_image(&mut self, image: TextureHandle) {
+        self.image = Some(image);
+    }
+    pub fn texture_id(&self) -> Option<egui::TextureId> {
+        self.image.as_ref().map(|tex| tex.id())
+    }
     pub fn get_position(&self) -> (f32, f32) {
         (self.x, self.y)
+    }
+    pub fn set_position(&mut self, x: f32, y: f32, available: egui::Rect) {
+        (self.x, self.y) = (available.min.x + x, available.min.y + y);
     }
 }

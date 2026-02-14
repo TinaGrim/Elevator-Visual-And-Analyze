@@ -4,6 +4,8 @@ mod elevator_widget;
 mod human;
 mod human_widget;
 
+use core::f32;
+
 use eframe::egui;
 use egui::{
     Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, vec2,
@@ -22,6 +24,7 @@ struct Elevator {
     elevator: ElevatorObject,
     elevator_rect: Vec2,
     human: HumanObject,
+    human_rect: Vec2,
     floors: Vec<String>,
 }
 
@@ -35,6 +38,7 @@ impl Default for Elevator {
             elevator: ElevatorObject::new(1, 0.0, 0.0),
             elevator_rect: Vec2::new(150.0, 195.0),
             human: HumanObject::new("Tina".to_string(), 0.0, 0.0),
+            human_rect: Vec2::new(150.0, 150.0),
             floors: vec![
                 "G".to_string(),
                 "1".to_string(),
@@ -93,7 +97,11 @@ impl eframe::App for Elevator {
                     if let Some(texture) = &self.elevator_texture_handle {
                         self.elevator.set_image(texture.clone());
                     }
-                    change_floor(&mut self.elevator, "G", available_rect);
+                    if let Some(texture) = &self.human_texture_handle {
+                        self.human.set_image(texture.clone());
+                    }
+                    at_floor_person(&mut self.human, "G", available_rect, 100.0);
+                    at_floor_elevator(&mut self.elevator, "G", available_rect, 500.0);
                 }
 
                 // Make those frame eaiser
@@ -114,19 +122,19 @@ impl eframe::App for Elevator {
                         {
                             match key {
                                 egui::Key::Num1 => {
-                                    change_floor(&mut self.elevator, "1", available_rect);
+                                    at_floor_elevator(&mut self.elevator, "1", available_rect, 500.0);
                                     println!("Elevator set floor -> 1\n")
                                 }
                                 egui::Key::Num2 => {
-                                    change_floor(&mut self.elevator, "2", available_rect);
+                                    at_floor_elevator(&mut self.elevator, "2", available_rect, 500.0);
                                     println!("Elevator set floor -> 2\n")
                                 }
                                 egui::Key::Num3 => {
-                                    change_floor(&mut self.elevator, "3", available_rect);
+                                    at_floor_elevator(&mut self.elevator, "3", available_rect, 500.0);
                                     println!("Elevator set floor -> 3\n")
                                 }
                                 egui::Key::G => {
-                                    change_floor(&mut self.elevator, "G", available_rect);
+                                    at_floor_elevator(&mut self.elevator, "G", available_rect,500.0);
                                     println!("Elevator set floor -> G\n")
                                 }
 
@@ -135,21 +143,32 @@ impl eframe::App for Elevator {
                         }
                     }
                 });
-
-                let widget = ElevatorWidget::new(&mut self.elevator, self.elevator_rect);
-                ui.add(widget);
+                let human = HumanWidget::new(&mut self.human, self.human_rect);
+                let elevator = ElevatorWidget::new(&mut self.elevator, self.elevator_rect);
+                ui.add(elevator);
+                ui.add(human);
             });
         });
 
         ctx.request_repaint();
     }
 }
-fn change_floor(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect) {
+fn at_floor_elevator(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect, x: f32) {
     match floor {
-        "3" => elevator.set_position(500.0, 0.0, available_rect),
-        "2" => elevator.set_position(500.0, 200.0, available_rect),
-        "1" => elevator.set_position(500.0, 400.0, available_rect),
-        "G" => elevator.set_position(500.0, 600.0, available_rect),
+        "3" => elevator.set_position(x, 0.0, available_rect),
+        "2" => elevator.set_position(x, 200.0, available_rect),
+        "1" => elevator.set_position(x, 400.0, available_rect),
+        "G" => elevator.set_position(x, 600.0, available_rect),
+        _ => (),
+    }
+}
+
+fn at_floor_person(person: &mut HumanObject, floor: &str, available_rect: egui::Rect, x: f32) {
+    match floor {
+        "3" => person.set_position(x, 1.0, available_rect),
+        "2" => person.set_position(x, 300.0, available_rect),
+        "1" => person.set_position(x, 500.0, available_rect),
+        "G" => person.set_position(x, 700.0, available_rect),
         _ => (),
     }
 }
@@ -175,7 +194,7 @@ fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rec
     for floor in &floors {
         let position = egui::pos2(
             available_rect.min.x + 100.0,
-            available_rect.min.y + start_floor,
+            available_rect.min.y + start_floor - 50.0,
         );
         let rect = egui::Rect::from_min_size(position, egui::vec2(50.0, 50.0));
         ui.allocate_ui_at_rect(rect, |ui| {
