@@ -1,14 +1,20 @@
+use crate::Elevator;
 use egui::{
     Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, vec2,
 };
-
+use rand::Rng;
 pub struct HumanObject {
     name: String,
+
     // position
     x: f32,
     y: f32,
+
     velocity_x: f32,
     velocity_y: f32,
+
+    destination: f32,
+    floor: String,
 
     speed: f32,
     image: Option<TextureHandle>,
@@ -21,28 +27,41 @@ impl std::fmt::Debug for HumanObject {
             .field("y", &self.y)
             .field("velocity_x", &self.velocity_x)
             .field("velocity_y", &self.velocity_y)
+            .field("human destination", &self.destination)
             .field("speed", &self.speed)
             .field("image", &self.image.is_some())
             .finish()
     }
 }
 impl HumanObject {
-    pub fn new(name: String, x: f32, y: f32) -> Self {
+    pub fn new(name: String, floor: String, x: f32, y: f32) -> Self {
         Self {
             name,
             x,
             y,
+
             velocity_x: 0.0,
             velocity_y: 0.0,
+            destination: rand::thread_rng().gen_range(350.0..400.0),
+            floor,
             speed: 5.0,
             image: None,
         }
     }
+
+    pub fn update(&mut self) {
+        if self.x < self.destination {
+            self.x += 1.0;
+        }
+    }
+    pub fn floor(&self) -> &str {
+        &self.floor
+    }
     pub fn set_image(&mut self, image: TextureHandle) {
         self.image = Some(image);
     }
-    pub fn texture_id(&self) -> Option<egui::TextureId> {
-        self.image.as_ref().map(|tex| tex.id())
+    pub fn texture_id(&self) -> egui::TextureId {
+        self.image.clone().unwrap().id()
     }
     pub fn get_position(&self) -> (f32, f32) {
         (self.x, self.y)
