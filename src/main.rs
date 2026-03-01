@@ -5,11 +5,14 @@ mod human;
 mod human_widget;
 
 use core::f32;
+use std::time;
 
 use eframe::egui;
 use egui::{
-    Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, vec2,
+    Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, pos2, vec2
 };
+use rand::{Rng, random};
+use chrono::{Local, Duration};
 
 use crate::{elevator::ElevatorObject, elevator_widget::ElevatorWidget};
 use crate::{human::HumanObject, human_widget::HumanWidget};
@@ -23,9 +26,11 @@ struct Elevator {
     human_texture_handle: Option<TextureHandle>,
     elevator: ElevatorObject,
     elevator_rect: Vec2,
-    human: HumanObject,
-    human_rect: Vec2,
+    human: Vec<HumanObject>,
+    human_rect: Vec<Vec2>,
+    human_obstacle: time::Instant,
     floors: Vec<String>,
+    button_texture_handle: Vec<TextureHandle>,
 }
 
 impl Default for Elevator {
@@ -37,14 +42,16 @@ impl Default for Elevator {
             human_texture_handle: None,
             elevator: ElevatorObject::new(1, 0.0, 0.0),
             elevator_rect: Vec2::new(150.0, 195.0),
-            human: HumanObject::new("Tina".to_string(), 0.0, 0.0),
-            human_rect: Vec2::new(150.0, 150.0),
+            human: vec![HumanObject::new("Tina".to_string(), "2".to_string(), 0.0, 0.0)],
+            human_rect: vec![Vec2::new(130.0, 150.0)],
+            human_obstacle: time::Instant::now(),
             floors: vec![
                 "G".to_string(),
                 "1".to_string(),
                 "2".to_string(),
                 "3".to_string(),
             ],
+            button_texture_handle: Vec::new(),
         }
     }
 }
@@ -57,6 +64,7 @@ impl std::fmt::Debug for Elevator {
             .field("Human_hanle", &self.human_texture_handle.is_some())
             .field("elevator object", &self.elevator)
             .field("elevator rect", &self.elevator_rect)
+            .field("button_handle", &self.button_texture_handle.is_empty())
             .finish()
     }
 }
@@ -78,11 +86,27 @@ impl eframe::App for Elevator {
                 if !self.image_loaded {
                     let elevator_image_byes = include_bytes!("elevator.png");
                     let human_image_bytes = include_bytes!("human.png");
+                    let normal_button = include_bytes!("normalbutton.png");
+                    let red_button = include_bytes!("redbutton.png");
+                    let green_button = include_bytes!("greenbutton.png");
+                    let both_button = include_bytes!("bothbutton.png");
+
+
 
                     let elevator_color_image = egui_extras::image::load_image_bytes(elevator_image_byes)
                         .expect("Failed to load elevator image");
                     let human_color_image = egui_extras::image::load_image_bytes(human_image_bytes)
                         .expect("Failed to load human image");
+                    let normal_button_color_image = egui_extras::image::load_image_bytes(normal_button)
+                        .expect("Failed to load normal button image");
+                    let red_button_color_image = egui_extras::image::load_image_bytes(red_button)
+                        .expect("Failed to load red button image");
+                    let green_button_color_image = egui_extras::image::load_image_bytes(green_button)
+                        .expect("Failed to load green button image");
+                    let both_button_color_image = egui_extras::image::load_image_bytes(both_button)
+                        .expect("Failed to load both button image");
+
+
                     self.elevator_texture_handle = Some(ctx.load_texture(
                         "elevator_texture",
                         elevator_color_image,
@@ -91,26 +115,52 @@ impl eframe::App for Elevator {
                     self.human_texture_handle = Some(ctx.load_texture(
                         "human_texture", 
                         human_color_image, 
-                        egui::TextureOptions::default()));
-                    self.image_loaded = true;
+                        egui::TextureOptions::default()
+                    ));
+                    self.button_texture_handle.push(ctx.load_texture(
+                        "normal_button_texture",
+                        normal_button_color_image,
+                        egui::TextureOptions::default(),
+                    ));
+                    self.button_texture_handle.push(ctx.load_texture(
+                        "red_button_texture",
+                        red_button_color_image,
+                        egui::TextureOptions::default(),
+                    ));
+                    self.button_texture_handle.push(ctx.load_texture(
+                        "green_button_texture",
+                        green_button_color_image,
+                        egui::TextureOptions::default(),
+                    ));
+                    self.button_texture_handle.push(ctx.load_texture(
+                        "both_button_texture",
+                        both_button_color_image,
+                        egui::TextureOptions::default()
+                    ));
 
                     if let Some(texture) = &self.elevator_texture_handle {
                         self.elevator.set_image(texture.clone());
                     }
                     if let Some(texture) = &self.human_texture_handle {
-                        self.human.set_image(texture.clone());
+                        self.human[0].set_image(texture.clone());
                     }
-                    at_floor_person(&mut self.human, "G", available_rect, 100.0);
+
+                    self.image_loaded = true;
+
+                    at_floor_person(&mut self.human[0], available_rect);
                     at_floor_elevator(&mut self.elevator, "G", available_rect, 500.0);
+                    at_floor_elevator_destination(&mut self.elevator, "G", available_rect);
                 }
 
                 // Make those frame eaiser
                 ui.allocate_painter(available_rect.size(), Sense::click_and_drag());
 
                 let grid_size = 200.0;
+                let mut button_floors = vec![self.button_texture_handle[0].clone(); 4];
+
                 draw_grid_lines(ui, available_rect, grid_size);
                 draw_floors(ui, self.floors.clone(), available_rect, grid_size);
-
+                draw_buttons(ui, button_floors, available_rect, grid_size);
                 ui.input(|input| {
                     for event in &input.events {
                         if let egui::Event::Key {
@@ -122,31 +172,58 @@ impl eframe::App for Elevator {
                         {
                             match key {
                                 egui::Key::Num1 => {
-                                    at_floor_elevator(&mut self.elevator, "1", available_rect, 500.0);
-                                    println!("Elevator set floor -> 1\n")
+                                    at_floor_elevator_destination(&mut self.elevator, "1", available_rect);
+                                    println!("Elevator set floor -> 1\n");
                                 }
                                 egui::Key::Num2 => {
-                                    at_floor_elevator(&mut self.elevator, "2", available_rect, 500.0);
-                                    println!("Elevator set floor -> 2\n")
+                                    at_floor_elevator_destination(&mut self.elevator, "2", available_rect);
+                                    println!("Elevator set floor -> 2\n");
                                 }
                                 egui::Key::Num3 => {
-                                    at_floor_elevator(&mut self.elevator, "3", available_rect, 500.0);
-                                    println!("Elevator set floor -> 3\n")
+                                    at_floor_elevator_destination(&mut self.elevator, "3", available_rect);
+                                    println!("Elevator set floor -> 3\n");
                                 }
                                 egui::Key::G => {
-                                    at_floor_elevator(&mut self.elevator, "G", available_rect,500.0);
-                                    println!("Elevator set floor -> G\n")
+                                    at_floor_elevator_destination(&mut self.elevator, "G", available_rect);
+                                    println!("Elevator set floor -> G\n");
                                 }
 
-                                _ => println!("Usage: please type the floor for destination. ep(1, 2, 3, G) \n"),
+                                _ => println!("Usage: please type the floor for destination. e.p(1, 2, 3, G) \n"),
                             }
                         }
                     }
                 });
-                let human = HumanWidget::new(&mut self.human, self.human_rect);
+
+
+                if self.human_obstacle.elapsed() >= std::time::Duration::from_secs_f32(5.0) && self.human.len() < 6 {
+                    
+                    let floor = self.floors[rand::thread_rng().gen_range(0..self.floors.len())].clone();
+                    let name = names::Generator::default().next().unwrap();
+                    println!("Human created name: {}", name);
+                    let mut human = HumanObject::new(name, floor , 0.0, 0.0);
+                    at_floor_person(&mut human, available_rect);
+                    if let Some(texture) = &self.human_texture_handle {
+                        human.set_image(texture.clone());
+                    }
+                    self.human.push(human);
+                    self.human_rect.push(Vec2::new(130.0, 150.0));
+                    self.human_obstacle = std::time::Instant::now();
+
+                }
+                self.elevator.update();
+                for human in &mut self.human {
+                    human.update();
+                }
+                
+                
+
                 let elevator = ElevatorWidget::new(&mut self.elevator, self.elevator_rect);
+                for (human, &human_rect) in self.human.iter_mut().zip(&self.human_rect) {
+                    
+                    let human = HumanWidget::new(human, human_rect);
+                    ui.add(human);
+                }
                 ui.add(elevator);
-                ui.add(human);
             });
         });
 
@@ -162,13 +239,22 @@ fn at_floor_elevator(elevator: &mut ElevatorObject, floor: &str, available_rect:
         _ => (),
     }
 }
-
-fn at_floor_person(person: &mut HumanObject, floor: &str, available_rect: egui::Rect, x: f32) {
+fn at_floor_elevator_destination(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect) {
     match floor {
-        "3" => person.set_position(x, 1.0, available_rect),
-        "2" => person.set_position(x, 300.0, available_rect),
-        "1" => person.set_position(x, 500.0, available_rect),
-        "G" => person.set_position(x, 700.0, available_rect),
+        "3" => elevator.set_destination(0.0, available_rect),
+        "2" => elevator.set_destination(200.0, available_rect),
+        "1" => elevator.set_destination(400.0, available_rect),
+        "G" => elevator.set_destination(600.0, available_rect),
+        _ => (),
+
+    }
+}
+fn at_floor_person(person: &mut HumanObject, available_rect: egui::Rect) {
+    match person.floor() {
+        "3" => person.set_position(0.0, 0.0, available_rect),
+        "2" => person.set_position(0.0, 200.0, available_rect),
+        "1" => person.set_position(0.0, 400.0, available_rect),
+        "G" => person.set_position(0.0, 600.0, available_rect),
         _ => (),
     }
 }
@@ -186,6 +272,20 @@ fn draw_grid_lines(ui: &mut egui::Ui, available_rect: egui::Rect, grid_size: f32
             egui::Stroke::new(1.0, egui::Color32::GRAY),
         );
         y += grid_size;
+    }
+}
+fn draw_buttons(ui: &mut egui::Ui, buttons: Vec<TextureHandle>, available_rect: egui::Rect, grid_size: f32) {
+    let mut start_floors: f32 = available_rect.height() - (grid_size / 2.0);
+    for button in &buttons {
+        let position = egui::pos2(available_rect.min.x + 450.0, available_rect.min.x + start_floors);
+
+        let rect = egui::Rect::from_min_size(position, egui::vec2(25.0, 50.0));
+        let texture_id = button.id();
+        ui.allocate_ui_at_rect(rect, |ui| {
+            ui.painter().image(texture_id, rect, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        });
+        start_floors -= grid_size;
+
     }
 }
 fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rect, grid_size: f32) {

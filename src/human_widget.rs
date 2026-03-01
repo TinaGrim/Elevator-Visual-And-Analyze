@@ -23,17 +23,18 @@ impl<'a> HumanWidget<'a> {
 impl<'a> Widget for HumanWidget<'a> {
     fn ui(self, ui: &mut egui::Ui) -> Response {
         let (x, y) = self.object.get_position();
-        let position = egui::pos2(x, y);
-        let rect = egui::Rect::from_center_size(position, self.size);
+        let shift = -15.0 + (self.size.y) / 2.0;
+        let position_shift = egui::pos2(x, y + shift);
+
+        let rect = egui::Rect::from_min_size(position_shift, self.size);
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
-        if let Some(textureid) = self.object.texture_id() {
-            ui.painter().image(
-                textureid,
-                rect,
-                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                egui::Color32::WHITE,
-            );
-        };
+        let textureid = self.object.texture_id();
+        ui.painter().image(
+            textureid,
+            rect,
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
 
         response
     }

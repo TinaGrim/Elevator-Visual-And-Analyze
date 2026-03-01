@@ -1,7 +1,6 @@
 use crate::elevator::{Door, ElevatorObject};
 use egui::{Align2, Color32, FontFamily, FontId, Rect, Response, Sense, Vec2, Widget};
 
-
 #[derive(Debug)]
 pub struct ElevatorWidget<'a> {
     object: &'a mut ElevatorObject,
@@ -33,21 +32,13 @@ impl<'a> Widget for ElevatorWidget<'a> {
             }
         }
 
-        if let Some(image) = self.object.texture_id() {
-            painter.image(
-                image,
-                rect,
-                Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                Color32::WHITE,
-            );
-        } else {
-            painter.rect(
-                rect,
-                5.0,
-                Color32::from_rgb(50, 35, 23),
-                egui::Stroke::new(2.0, Color32::from_rgb(50, 100, 150)),
-            );
-        }
+        let image = self.object.texture_id();
+        painter.image(
+            image,
+            rect,
+            Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            Color32::WHITE,
+        );
         response
     }
 }
