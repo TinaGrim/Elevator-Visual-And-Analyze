@@ -1,10 +1,11 @@
 use crate::Elevator;
 use egui::{
-    Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, vec2,
+    vec2, Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2,
 };
 use rand::Rng;
+#[derive(Clone)]
 pub struct HumanObject {
-    name: String,
+    pub name: String,
 
     // position
     x: f32,
@@ -15,6 +16,10 @@ pub struct HumanObject {
 
     destination: f32,
     floor: String,
+    is_request: bool,
+    pub has_requested: bool,
+    request_floor: Option<String>,
+    pub reach_elevator: bool,
 
     speed: f32,
     image: Option<TextureHandle>,
@@ -28,6 +33,9 @@ impl std::fmt::Debug for HumanObject {
             .field("velocity_x", &self.velocity_x)
             .field("velocity_y", &self.velocity_y)
             .field("human destination", &self.destination)
+            .field("is request", &self.is_request)
+            .field("has requested", &self.has_requested)
+            .field("request floor", &self.request_floor.is_none())
             .field("speed", &self.speed)
             .field("image", &self.image.is_some())
             .finish()
@@ -43,6 +51,10 @@ impl HumanObject {
             velocity_x: 0.0,
             velocity_y: 0.0,
             destination: rand::thread_rng().gen_range(350.0..400.0),
+            is_request: false,
+            has_requested: false,
+            request_floor: None,
+            reach_elevator: false,
             floor,
             speed: 5.0,
             image: None,
@@ -57,8 +69,31 @@ impl HumanObject {
     pub fn floor(&self) -> &str {
         &self.floor
     }
+    pub fn request_floor(&mut self) -> Option<String> {
+        if self.is_request && !self.has_requested {
+            self.has_requested = true;
+            Some(self.floor.clone())
+        } else {
+            None
+        }
+    }
+    pub fn enter_elevator(&mut self, position: (f32, f32)) {
+        self.destination = position.1 + rand::thread_rng().gen_range(45.0..50.0);
+        if self.x == position.1 + 60.0 {}
+    }
+    pub fn get_current_floor(&self) -> String {
+        self.floor.clone()
+    }
     pub fn set_image(&mut self, image: TextureHandle) {
         self.image = Some(image);
+    }
+    pub fn reach_destination(&mut self) -> bool {
+        if self.x >= self.destination {
+            self.is_request = true;
+            true
+        } else {
+            false
+        }
     }
     pub fn texture_id(&self) -> egui::TextureId {
         self.image.clone().unwrap().id()
