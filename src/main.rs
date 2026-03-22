@@ -5,9 +5,11 @@ mod human;
 mod human_widget;
 
 use core::f32;
+use colored::Colorize;
 use std::time;
-
+use std::collections::VecDeque;
 use eframe::egui;
+use egui::debug_text::print;
 use egui::{
     Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, pos2, vec2
 };
@@ -28,9 +30,13 @@ struct Elevator {
     elevator_rect: Vec2,
     human: Vec<HumanObject>,
     human_rect: Vec<Vec2>,
-    human_obstacle: time::Instant,
     floors: Vec<String>,
     button_texture_handle: Vec<TextureHandle>,
+    request_elevator: VecDeque<String>,
+    entered_elevator: Vec<HumanObject>,
+
+    human_obstacle: time::Instant,
+    open_count_time: time::Instant,
 }
 
 impl Default for Elevator {
@@ -40,18 +46,21 @@ impl Default for Elevator {
             image_loaded: false,
             elevator_texture_handle: None,
             human_texture_handle: None,
-            elevator: ElevatorObject::new(1, 0.0, 0.0),
+            elevator: ElevatorObject::new(1, "G".to_string(),0.0, 0.0),
             elevator_rect: Vec2::new(150.0, 195.0),
-            human: vec![HumanObject::new("Tina".to_string(), "2".to_string(), 0.0, 0.0)],
+            human: vec![HumanObject::new("Tina".to_string(), "1".to_string(), 0.0, 0.0)],
             human_rect: vec![Vec2::new(130.0, 150.0)],
             human_obstacle: time::Instant::now(),
             floors: vec![
-                "G".to_string(),
-                "1".to_string(),
-                "2".to_string(),
                 "3".to_string(),
+                "2".to_string(),
+                "1".to_string(),
+                "G".to_string(),
             ],
             button_texture_handle: Vec::new(),
+            request_elevator: VecDeque::new(),
+            entered_elevator: Vec::new(),
+            open_count_time: time::Instant::now(),
         }
     }
 }
@@ -65,6 +74,7 @@ impl std::fmt::Debug for Elevator {
             .field("elevator object", &self.elevator)
             .field("elevator rect", &self.elevator_rect)
             .field("button_handle", &self.button_texture_handle.is_empty())
+            .field("request_elevator ", &self.request_elevator.is_empty())
             .finish()
     }
 }
@@ -195,11 +205,12 @@ impl eframe::App for Elevator {
                 });
 
 
+                // Human spawn
                 if self.human_obstacle.elapsed() >= std::time::Duration::from_secs_f32(5.0) && self.human.len() < 6 {
                     
                     let floor = self.floors[rand::thread_rng().gen_range(0..self.floors.len())].clone();
                     let name = names::Generator::default().next().unwrap();
-                    println!("Human created name: {}", name);
+                    println!("[HUMAN] created name: {}", name.yellow());
                     let mut human = HumanObject::new(name, floor , 0.0, 0.0);
                     at_floor_person(&mut human, available_rect);
                     if let Some(texture) = &self.human_texture_handle {
@@ -208,22 +219,75 @@ impl eframe::App for Elevator {
                     self.human.push(human);
                     self.human_rect.push(Vec2::new(130.0, 150.0));
                     self.human_obstacle = std::time::Instant::now();
-
                 }
+
+                // Update
                 self.elevator.update();
                 for human in &mut self.human {
                     human.update();
                 }
-                
-                
 
+                // get request
+                match self.elevator.status {
+                    elevator::ActionStatus::Stop => {
+                        let human_current_floor: Vec<&HumanObject> = self.human.iter().filter(|h|h.get_current_floor() == self.elevator.get_current_floor()).collect();
+
+                        if self.elevator.door == elevator::Door::Close {
+                            println!("[{}] The elevator is wait for enter","ELEVATOR".magenta());
+
+                            self.open_count_time = time::Instant::now();
+                            self.elevator.toggle_door();
+
+                        } else if self.open_count_time.elapsed() >= time::Duration::from_secs_f32(4.0){
+                            match self.elevator.door_status() {
+                                elevator::Door::Close => println!("[{}] {} the elevator door.","ELEVATOR".magenta(), "CLOSE".red()),
+                                elevator::Door::Open => println!("[{}] {} the elevator door.","ELEVATOR".magenta(),"OPEN".green()),
+                            };
+                            
+                            self.elevator.toggle_door();
+                            self.request_elevator.pop_front();
+                            self.elevator.status = elevator::ActionStatus::Idle;
+
+                        }
+
+                    }
+                    elevator::ActionStatus::Up | elevator::ActionStatus::Down => {
+                    }
+                    elevator::ActionStatus::Idle => {
+                        if let Some(floor) = self.request_elevator.front() {
+                            at_floor_elevator_destination(&mut self.elevator, floor, available_rect);
+                        }
+                        if self.elevator.reach_destination() && !self.request_elevator.is_empty() {
+                            self.elevator.status = elevator::ActionStatus::Stop;
+                        }
+
+                    }
+                }
+                for human in &mut self.human {
+                    if human.reach_destination() && !human.has_requested{
+                        if let Some(floor) = human.request_floor() {
+                            println!("[HUMAN] Request on the floor: {}", floor.blue());
+                            self.request_elevator.push_back(floor);
+                        }
+                    } else if self.elevator.door == elevator::Door::Open && self.elevator.get_current_floor() == human.get_current_floor() {
+                        human.enter_elevator(self.elevator.get_position());
+                    }
+                }
+                // if self.elevator.reach_destination() {
+                //     self.elevator.status = elevator::ActionStatus::Stop;
+                // }
+                self.human.retain(|human| {
+                    !human.reach_elevator
+                });
+
+                // Render
                 let elevator = ElevatorWidget::new(&mut self.elevator, self.elevator_rect);
+                ui.add(elevator);
+
                 for (human, &human_rect) in self.human.iter_mut().zip(&self.human_rect) {
-                    
                     let human = HumanWidget::new(human, human_rect);
                     ui.add(human);
                 }
-                ui.add(elevator);
             });
         });
 
@@ -232,19 +296,43 @@ impl eframe::App for Elevator {
 }
 fn at_floor_elevator(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect, x: f32) {
     match floor {
-        "3" => elevator.set_position(x, 0.0, available_rect),
-        "2" => elevator.set_position(x, 200.0, available_rect),
-        "1" => elevator.set_position(x, 400.0, available_rect),
-        "G" => elevator.set_position(x, 600.0, available_rect),
+        "3" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_position(x, 0.0, available_rect);
+        },
+        "2" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_position(x, 200.0, available_rect)
+        }
+        "1" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_position(x, 400.0, available_rect)
+        }
+        "G" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_position(x, 600.0, available_rect);
+    }
         _ => (),
     }
 }
 fn at_floor_elevator_destination(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect) {
     match floor {
-        "3" => elevator.set_destination(0.0, available_rect),
-        "2" => elevator.set_destination(200.0, available_rect),
-        "1" => elevator.set_destination(400.0, available_rect),
-        "G" => elevator.set_destination(600.0, available_rect),
+        "3" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_destination(0.0, available_rect);
+        },
+        "2" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_destination(200.0, available_rect)
+        }
+        "1" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_destination(400.0, available_rect)
+        }
+        "G" => {
+            elevator.set_floor(floor.to_string());
+            elevator.set_destination(600.0, available_rect);
+    }
         _ => (),
 
     }
@@ -275,7 +363,9 @@ fn draw_grid_lines(ui: &mut egui::Ui, available_rect: egui::Rect, grid_size: f32
     }
 }
 fn draw_buttons(ui: &mut egui::Ui, buttons: Vec<TextureHandle>, available_rect: egui::Rect, grid_size: f32) {
-    let mut start_floors: f32 = available_rect.height() - (grid_size / 2.0);
+    // let mut start_floors: f32 = available_rect.height() - (grid_size / 2.0);
+    let mut start_floors: f32 = grid_size / 2.0;
+
     for button in &buttons {
         let position = egui::pos2(available_rect.min.x + 450.0, available_rect.min.x + start_floors);
 
@@ -284,12 +374,12 @@ fn draw_buttons(ui: &mut egui::Ui, buttons: Vec<TextureHandle>, available_rect: 
         ui.allocate_ui_at_rect(rect, |ui| {
             ui.painter().image(texture_id, rect, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
         });
-        start_floors -= grid_size;
+        start_floors += grid_size;
 
     }
 }
 fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rect, grid_size: f32) {
-    let mut start_floor: f32 = available_rect.height() - (grid_size / 2.0);
+    let mut start_floor: f32 = grid_size / 2.0;
 
     for floor in &floors {
         let position = egui::pos2(
@@ -307,7 +397,7 @@ fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rec
                 egui::Color32::GRAY,
             );
         });
-        start_floor -= grid_size;
+        start_floor += grid_size;
     }
 }
 fn main() -> Result<(), eframe::Error> {
