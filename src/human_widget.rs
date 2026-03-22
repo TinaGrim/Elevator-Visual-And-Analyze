@@ -1,8 +1,8 @@
 use crate::human::HumanObject;
 
 use egui::{
-    Color32, ColorImage, Image, ImageData, Response, Sense, TextureHandle, TextureOptions, Vec2,
-    Widget, vec2,
+    vec2, Align2, Color32, ColorImage, FontId, Image, ImageData, Response, Sense, TextureHandle,
+    TextureOptions, Vec2, Widget,
 };
 
 #[derive(Debug)]
@@ -29,11 +29,19 @@ impl<'a> Widget for HumanWidget<'a> {
         let rect = egui::Rect::from_min_size(position_shift, self.size);
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let textureid = self.object.texture_id();
+        let text_pos = egui::pos2(x + 60.0, y + 60.0);
         ui.painter().image(
             textureid,
             rect,
             egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
             egui::Color32::WHITE,
+        );
+        ui.painter().text(
+            text_pos,
+            Align2::CENTER_CENTER,
+            self.object.name.clone(),
+            FontId::monospace(20.0),
+            Color32::from_white_alpha(8),
         );
 
         response
