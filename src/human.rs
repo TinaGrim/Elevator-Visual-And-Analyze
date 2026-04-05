@@ -79,6 +79,9 @@ impl HumanObject {
     }
     pub fn enter_elevator(&mut self, position: (f32, f32)) {
         self.destination = position.0 + rand::thread_rng().gen_range(45.0..50.0);
+        if self.x >= self.destination {
+            self.reach_elevator = true;
+        }
     }
     pub fn get_current_floor(&self) -> String {
         self.floor.clone()

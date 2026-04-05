@@ -25,12 +25,7 @@ impl<'a> Widget for ElevatorWidget<'a> {
 
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let painter = ui.painter();
-        if response.clicked() {
-            match self.object.toggle_door() {
-                Door::Close => println!("Elevator Door : CLOSED"),
-                Door::Open => println!("Elevator Door : OPENED"),
-            }
-        }
+        if response.clicked() {};
 
         let image = self.object.texture_id();
         painter.image(

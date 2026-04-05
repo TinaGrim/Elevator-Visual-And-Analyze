@@ -5,13 +5,14 @@ mod human;
 mod human_widget;
 
 use core::f32;
+use std::fmt::format;
 use colored::Colorize;
-use std::time;
+use std::time::{self, Instant};
 use std::collections::VecDeque;
 use eframe::egui;
 use egui::debug_text::print;
 use egui::{
-    Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Vec2, pos2, vec2
+    Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Ui, Vec2, pos2, vec2
 };
 use rand::{Rng, random};
 use chrono::{Local, Duration};
@@ -32,11 +33,12 @@ struct Elevator {
     human_rect: Vec<Vec2>,
     floors: Vec<String>,
     button_texture_handle: Vec<TextureHandle>,
-    request_elevator: VecDeque<String>,
+    request_elevator: VecDeque<HumanObject>,
     entered_elevator: Vec<HumanObject>,
 
     human_obstacle: time::Instant,
     open_count_time: time::Instant,
+    search_time: time::Instant,
 }
 
 impl Default for Elevator {
@@ -61,6 +63,7 @@ impl Default for Elevator {
             request_elevator: VecDeque::new(),
             entered_elevator: Vec::new(),
             open_count_time: time::Instant::now(),
+            search_time: time::Instant::now(),
         }
     }
 }
@@ -171,6 +174,7 @@ impl eframe::App for Elevator {
                 draw_grid_lines(ui, available_rect, grid_size);
                 draw_floors(ui, self.floors.clone(), available_rect, grid_size);
                 draw_buttons(ui, button_floors, available_rect, grid_size);
+                draw_elevator_requests(ui, available_rect, &self.request_elevator);
                 ui.input(|input| {
                     for event in &input.events {
                         if let egui::Event::Key {
@@ -206,11 +210,11 @@ impl eframe::App for Elevator {
 
 
                 // Human spawn
-                if self.human_obstacle.elapsed() >= std::time::Duration::from_secs_f32(5.0) && self.human.len() < 6 {
+                if self.human_obstacle.elapsed() >= std::time::Duration::from_secs_f32(5.0) && self.human.len() < 2 {
                     
                     let floor = self.floors[rand::thread_rng().gen_range(0..self.floors.len())].clone();
                     let name = names::Generator::default().next().unwrap();
-                    println!("[HUMAN] created name: {}", name.yellow());
+                    println!("[{}] created name: {}","HUMAN".yellow(), name.yellow());
                     let mut human = HumanObject::new(name, floor , 0.0, 0.0);
                     at_floor_person(&mut human, available_rect);
                     if let Some(texture) = &self.human_texture_handle {
@@ -230,48 +234,81 @@ impl eframe::App for Elevator {
                 // get request
                 match self.elevator.status {
                     elevator::ActionStatus::Stop => {
-                        let human_current_floor: Vec<&HumanObject> = self.human.iter().filter(|h|h.get_current_floor() == self.elevator.get_current_floor()).collect();
-
+                        // let human_current_floor: Vec<&HumanObject> = self.human.iter().filter(|h|h.get_current_floor() == self.elevator.get_current_floor()).collect();
                         if self.elevator.door == elevator::Door::Close {
-                            println!("[{}] The elevator is wait for enter","ELEVATOR".magenta());
 
                             self.open_count_time = time::Instant::now();
-                            self.elevator.toggle_door();
 
-                        } else if self.open_count_time.elapsed() >= time::Duration::from_secs_f32(4.0){
-                            match self.elevator.door_status() {
-                                elevator::Door::Close => println!("[{}] {} the elevator door.","ELEVATOR".magenta(), "CLOSE".red()),
-                                elevator::Door::Open => println!("[{}] {} the elevator door.","ELEVATOR".magenta(),"OPEN".green()),
-                            };
+                            self.elevator.toggle_door();
+                            println!("[{}] {} the elevator door","ELEVATOR".magenta(), self.elevator.door_status().green());
+
+                        } else if self.open_count_time.elapsed() >= time::Duration::from_secs_f32(6.0){
                             
                             self.elevator.toggle_door();
-                            self.request_elevator.pop_front();
-                            self.elevator.status = elevator::ActionStatus::Idle;
+                            println!("[{}] {} the elevator door","ELEVATOR".magenta(), self.elevator.door_status().red());
 
+                            // let human_entered = self.human.iter().any(|h| 
+                            //     h.has_requested && h.reach_elevator
+                            // );
+                            
+                            let current_floor = self.elevator.get_current_floor();
+                            let someone_boarded = self.human.iter().any(|h| h.reach_elevator);
+                            
+                            if someone_boarded {
+                                self.request_elevator.retain(|h| h.get_current_floor() != current_floor);
+                            }
+                            // if !human_entered {
+                            //     self.request_elevator.pop_front();
+                            // }
+
+                            self.elevator.status = elevator::ActionStatus::Idle;
                         }
 
                     }
                     elevator::ActionStatus::Up | elevator::ActionStatus::Down => {
-                    }
-                    elevator::ActionStatus::Idle => {
-                        if let Some(floor) = self.request_elevator.front() {
-                            at_floor_elevator_destination(&mut self.elevator, floor, available_rect);
-                        }
                         if self.elevator.reach_destination() && !self.request_elevator.is_empty() {
                             self.elevator.status = elevator::ActionStatus::Stop;
                         }
-
+                    }
+                    elevator::ActionStatus::Idle => {
+                        if self.search_time.elapsed() >= std::time::Duration::from_secs_f32(2.0){
+                            self.search_time = Instant::now();
+                            println!("[{}] {}","ELEVATOR".magenta(), "SEARCH".magenta());
+                            if let Some(floor) = self.request_elevator.front() {
+                                // println!("[{}] the elevator {}","ELEVATOR".magenta(), "ARRIVED".magenta());
+                                if self.elevator.get_current_floor() == floor.get_current_floor() {
+                                    self.elevator.status = elevator::ActionStatus::Stop;
+                                }
+                                at_floor_elevator_destination(&mut self.elevator, &floor.get_current_floor(), available_rect);
+                                self.search_time = Instant::now();
+                            }
+                        }
                     }
                 }
                 for human in &mut self.human {
-                    if human.reach_destination() && !human.has_requested{
-                        if let Some(floor) = human.request_floor() {
-                            println!("[HUMAN] Request on the floor: {}", floor.blue());
-                            self.request_elevator.push_back(floor);
+                    if !human.reach_destination(){
+                        continue;
+                    }
+                    if !human.has_requested {
+                        // Request when reach and not request before
+                        if human.request_floor().is_some() {
+                            println!("[{}] Request on the floor: {}","HUMAN".yellow(), human.get_current_floor().blue());
+                            self.request_elevator.push_back(human.to_owned());
                         }
                     } else if self.elevator.door == elevator::Door::Open && self.elevator.get_current_floor() == human.get_current_floor() {
+
+                        // Enter when the elevator had arrived
                         human.enter_elevator(self.elevator.get_position());
+                        if human.reach_elevator {
+                            let human_name = human.name.clone();
+                            println!("{} entered the elevator", human_name);
+                            self.request_elevator.retain(|human|{
+                                human.name != human_name
+                            });
+                        }
                     }
+
+
                 }
                 // if self.elevator.reach_destination() {
                 //     self.elevator.status = elevator::ActionStatus::Stop;
@@ -291,7 +328,7 @@ impl eframe::App for Elevator {
             });
         });
 
-        ctx.request_repaint();
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(1.0 / 80.0));
     }
 }
 fn at_floor_elevator(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect, x: f32) {
@@ -305,7 +342,7 @@ fn at_floor_elevator(elevator: &mut ElevatorObject, floor: &str, available_rect:
             elevator.set_position(x, 200.0, available_rect)
         }
         "1" => {
-            elevator.set_floor(floor.to_string());
+            elevator.set_floor(floor.to_string()); 
             elevator.set_position(x, 400.0, available_rect)
         }
         "G" => {
@@ -400,11 +437,24 @@ fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rec
         start_floor += grid_size;
     }
 }
+fn draw_elevator_requests(ui: &mut egui::Ui,available_rect: egui::Rect, elevator_request: &VecDeque<HumanObject>) {
+    let position = egui::pos2(available_rect.min.x + 300.0, available_rect.min.y + 300.0);
+
+    ui.painter().text(position, egui::Align2::CENTER_CENTER, format!("{:?}", elevator_request.iter().map(|h| &h.name).collect::<Vec<_>>()), egui::FontId::monospace(13.0), egui::Color32::from_white_alpha(255));
+
+
+}
 fn main() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions{
+        viewport: egui::ViewportBuilder::default()
+        .with_inner_size([400.0, 420.0])
+        .with_resizable(true),
+        ..Default::default()
+        
+    };
     println!("Elevator - Visualization and Analysis\n");
     eframe::run_native(
-        "Elevator - Visualization and Analysis\n",
+        "Elevator - Visualization and Analysis",
         options,
         Box::new(|cc| {
             install_image_loaders(&cc.egui_ctx);

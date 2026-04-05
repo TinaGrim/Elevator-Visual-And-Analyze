@@ -64,9 +64,15 @@ impl ElevatorObject {
     }
     pub fn update(&mut self) {
         if self.y < self.destination {
+            self.status = ActionStatus::Down;
             self.y += 1.0;
         } else if self.y > self.destination {
+            self.status = ActionStatus::Up;
             self.y -= 1.0;
+        } else {
+            if self.status == ActionStatus::Up || self.status == ActionStatus::Down {
+                self.status = ActionStatus::Stop;
+            }
         }
         // println!("Elevator {} position: ({}, {}) destination: {}", self.id, self.x, self.y, self.destination);
     }
@@ -95,17 +101,16 @@ impl ElevatorObject {
     pub fn texture_id(&self) -> egui::TextureId {
         self.image.clone().unwrap().id()
     }
-    pub fn door_status(&self) -> Door {
+    pub fn door_status(&self) -> String {
         match self.door {
-            Door::Close => Door::Close,
-            Door::Open => Door::Open,
+            Door::Close => "CLOSE".to_string(),
+            Door::Open => "OPEN".to_string(),
         }
     }
-    pub fn toggle_door(&mut self) -> Door {
-        self.door = match self.door {
-            Door::Close => Door::Open,
-            Door::Open => Door::Close,
-        };
-        self.door.clone()
+    pub fn toggle_door(&mut self) {
+        match self.door {
+            Door::Close => self.door = Door::Open,
+            Door::Open => self.door = Door::Close,
+        }
     }
 }
