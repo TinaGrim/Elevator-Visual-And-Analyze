@@ -1,4 +1,4 @@
-use egui::{self, Options, TextureHandle, TextureId, Vec2};
+use egui::{self, TextureHandle};
 use std::fmt;
 #[derive(Debug, PartialEq, Eq)]
 pub enum ActionStatus {

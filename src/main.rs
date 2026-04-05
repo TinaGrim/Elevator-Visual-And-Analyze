@@ -4,18 +4,16 @@ mod elevator_widget;
 mod human;
 mod human_widget;
 
-use core::f32;
-use std::fmt::format;
 use colored::Colorize;
-use std::time::{self, Instant};
-use std::collections::VecDeque;
+use core::f32;
 use eframe::egui;
-use egui::debug_text::print;
 use egui::{
-    Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Ui, Vec2, pos2, vec2
+    pos2, vec2, Color32, ColorImage, Image, ImageData, Sense, TextureHandle, TextureOptions, Ui,
+    Vec2,
 };
-use rand::{Rng, random};
-use chrono::{Local, Duration};
+use rand::{random, Rng};
+use std::collections::VecDeque;
+use std::time::{self, Instant};
 
 use crate::{elevator::ElevatorObject, elevator_widget::ElevatorWidget};
 use crate::{human::HumanObject, human_widget::HumanWidget};
@@ -26,6 +24,8 @@ struct Elevator {
     run: bool,
     image_loaded: bool,
     elevator_texture_handle: Option<TextureHandle>,
+    elevator_green_light_handle: Option<TextureHandle>,
+    elevator_red_light_handle: Option<TextureHandle>,
     human_texture_handle: Option<TextureHandle>,
     elevator: ElevatorObject,
     elevator_rect: Vec2,
@@ -34,7 +34,6 @@ struct Elevator {
     floors: Vec<String>,
     button_texture_handle: Vec<TextureHandle>,
     request_elevator: VecDeque<HumanObject>,
-    entered_elevator: Vec<HumanObject>,
 
     human_obstacle: time::Instant,
     open_count_time: time::Instant,
@@ -47,10 +46,17 @@ impl Default for Elevator {
             run: true,
             image_loaded: false,
             elevator_texture_handle: None,
+            elevator_green_light_handle: None,
+            elevator_red_light_handle: None,
             human_texture_handle: None,
-            elevator: ElevatorObject::new(1, "G".to_string(),0.0, 0.0),
+            elevator: ElevatorObject::new(1, "G".to_string(), 0.0, 0.0),
             elevator_rect: Vec2::new(150.0, 195.0),
-            human: vec![HumanObject::new("Tina".to_string(), "1".to_string(), 0.0, 0.0)],
+            human: vec![HumanObject::new(
+                "Tina".to_string(),
+                "1".to_string(),
+                0.0,
+                0.0,
+            )],
             human_rect: vec![Vec2::new(130.0, 150.0)],
             human_obstacle: time::Instant::now(),
             floors: vec![
@@ -61,7 +67,6 @@ impl Default for Elevator {
             ],
             button_texture_handle: Vec::new(),
             request_elevator: VecDeque::new(),
-            entered_elevator: Vec::new(),
             open_count_time: time::Instant::now(),
             search_time: time::Instant::now(),
         }
@@ -98,6 +103,8 @@ impl eframe::App for Elevator {
                 let available_rect = ui.available_rect_before_wrap();
                 if !self.image_loaded {
                     let elevator_image_byes = include_bytes!("elevator.png");
+                    let elevator_green_light_bytes = include_bytes!("elevator_green_light.png");
+                    let elevator_red_light_bytes = include_bytes!("elevator_red_light.png");
                     let human_image_bytes = include_bytes!("human.png");
                     let normal_button = include_bytes!("normalbutton.png");
                     let red_button = include_bytes!("redbutton.png");
@@ -108,6 +115,10 @@ impl eframe::App for Elevator {
 
                     let elevator_color_image = egui_extras::image::load_image_bytes(elevator_image_byes)
                         .expect("Failed to load elevator image");
+                    let elevator_green_light_image = egui_extras::image::load_image_bytes(elevator_green_light_bytes)
+                        .expect("Failed to load elevator green light image");
+                    let elevator_red_light_image = egui_extras::image::load_image_bytes(elevator_red_light_bytes)
+                        .expect("Failed to load elevator red light image");
                     let human_color_image = egui_extras::image::load_image_bytes(human_image_bytes)
                         .expect("Failed to load human image");
                     let normal_button_color_image = egui_extras::image::load_image_bytes(normal_button)
@@ -123,6 +134,16 @@ impl eframe::App for Elevator {
                     self.elevator_texture_handle = Some(ctx.load_texture(
                         "elevator_texture",
                         elevator_color_image,
+                        egui::TextureOptions::default(),
+                    ));
+                    self.elevator_green_light_handle = Some(ctx.load_texture(
+                        "elevator_green_light_texture",
+                        elevator_green_light_image,
+                        egui::TextureOptions::default(),
+                    ));
+                    self.elevator_red_light_handle = Some(ctx.load_texture(
+                        "elevator_red_light_texture",
+                        elevator_red_light_image,
                         egui::TextureOptions::default(),
                     ));
                     self.human_texture_handle = Some(ctx.load_texture(
@@ -318,8 +339,10 @@ impl eframe::App for Elevator {
                 });
 
                 // Render
-                let elevator = ElevatorWidget::new(&mut self.elevator, self.elevator_rect);
-                ui.add(elevator);
+                if let (Some(green), Some(red)) = (&self.elevator_green_light_handle, &self.elevator_red_light_handle) {
+                    let elevator = ElevatorWidget::new(&mut self.elevator, self.elevator_rect, green, red);
+                    ui.add(elevator);
+                }
 
                 for (human, &human_rect) in self.human.iter_mut().zip(&self.human_rect) {
                     let human = HumanWidget::new(human, human_rect);
@@ -331,33 +354,42 @@ impl eframe::App for Elevator {
         ctx.request_repaint_after(std::time::Duration::from_secs_f64(1.0 / 80.0));
     }
 }
-fn at_floor_elevator(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect, x: f32) {
+fn at_floor_elevator(
+    elevator: &mut ElevatorObject,
+    floor: &str,
+    available_rect: egui::Rect,
+    x: f32,
+) {
     match floor {
         "3" => {
             elevator.set_floor(floor.to_string());
             elevator.set_position(x, 0.0, available_rect);
-        },
+        }
         "2" => {
             elevator.set_floor(floor.to_string());
             elevator.set_position(x, 200.0, available_rect)
         }
         "1" => {
-            elevator.set_floor(floor.to_string()); 
+            elevator.set_floor(floor.to_string());
             elevator.set_position(x, 400.0, available_rect)
         }
         "G" => {
             elevator.set_floor(floor.to_string());
             elevator.set_position(x, 600.0, available_rect);
-    }
+        }
         _ => (),
     }
 }
-fn at_floor_elevator_destination(elevator: &mut ElevatorObject, floor: &str, available_rect: egui::Rect) {
+fn at_floor_elevator_destination(
+    elevator: &mut ElevatorObject,
+    floor: &str,
+    available_rect: egui::Rect,
+) {
     match floor {
         "3" => {
             elevator.set_floor(floor.to_string());
             elevator.set_destination(0.0, available_rect);
-        },
+        }
         "2" => {
             elevator.set_floor(floor.to_string());
             elevator.set_destination(200.0, available_rect)
@@ -369,9 +401,8 @@ fn at_floor_elevator_destination(elevator: &mut ElevatorObject, floor: &str, ava
         "G" => {
             elevator.set_floor(floor.to_string());
             elevator.set_destination(600.0, available_rect);
-    }
+        }
         _ => (),
-
     }
 }
 fn at_floor_person(person: &mut HumanObject, available_rect: egui::Rect) {
@@ -399,20 +430,32 @@ fn draw_grid_lines(ui: &mut egui::Ui, available_rect: egui::Rect, grid_size: f32
         y += grid_size;
     }
 }
-fn draw_buttons(ui: &mut egui::Ui, buttons: Vec<TextureHandle>, available_rect: egui::Rect, grid_size: f32) {
+fn draw_buttons(
+    ui: &mut egui::Ui,
+    buttons: Vec<TextureHandle>,
+    available_rect: egui::Rect,
+    grid_size: f32,
+) {
     // let mut start_floors: f32 = available_rect.height() - (grid_size / 2.0);
     let mut start_floors: f32 = grid_size / 2.0;
 
     for button in &buttons {
-        let position = egui::pos2(available_rect.min.x + 450.0, available_rect.min.x + start_floors);
+        let position = egui::pos2(
+            available_rect.min.x + 450.0,
+            available_rect.min.x + start_floors,
+        );
 
         let rect = egui::Rect::from_min_size(position, egui::vec2(25.0, 50.0));
         let texture_id = button.id();
         ui.allocate_ui_at_rect(rect, |ui| {
-            ui.painter().image(texture_id, rect, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+            ui.painter().image(
+                texture_id,
+                rect,
+                egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
         });
         start_floors += grid_size;
-
     }
 }
 fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rect, grid_size: f32) {
@@ -437,20 +480,30 @@ fn draw_floors(ui: &mut egui::Ui, floors: Vec<String>, available_rect: egui::Rec
         start_floor += grid_size;
     }
 }
-fn draw_elevator_requests(ui: &mut egui::Ui,available_rect: egui::Rect, elevator_request: &VecDeque<HumanObject>) {
+fn draw_elevator_requests(
+    ui: &mut egui::Ui,
+    available_rect: egui::Rect,
+    elevator_request: &VecDeque<HumanObject>,
+) {
     let position = egui::pos2(available_rect.min.x + 300.0, available_rect.min.y + 300.0);
 
-    ui.painter().text(position, egui::Align2::CENTER_CENTER, format!("{:?}", elevator_request.iter().map(|h| &h.name).collect::<Vec<_>>()), egui::FontId::monospace(13.0), egui::Color32::from_white_alpha(255));
-
-
+    ui.painter().text(
+        position,
+        egui::Align2::CENTER_CENTER,
+        format!(
+            "{:?}",
+            elevator_request.iter().map(|h| &h.name).collect::<Vec<_>>()
+        ),
+        egui::FontId::monospace(13.0),
+        egui::Color32::from_white_alpha(255),
+    );
 }
 fn main() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions{
+    let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-        .with_inner_size([400.0, 420.0])
-        .with_resizable(true),
+            .with_inner_size([400.0, 420.0])
+            .with_resizable(true),
         ..Default::default()
-        
     };
     println!("Elevator - Visualization and Analysis\n");
     eframe::run_native(

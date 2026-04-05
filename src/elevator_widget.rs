@@ -1,18 +1,31 @@
-use crate::elevator::{Door, ElevatorObject};
-use egui::{Align2, Color32, FontFamily, FontId, Rect, Response, Sense, Vec2, Widget};
+use crate::elevator::{ActionStatus, ElevatorObject};
+use egui::{Color32, Rect, Response, Sense, TextureHandle, Vec2, Widget};
 
-#[derive(Debug)]
 pub struct ElevatorWidget<'a> {
     object: &'a mut ElevatorObject,
-    door: bool,
     size: Vec2,
+    green_light: &'a TextureHandle,
+    red_light: &'a TextureHandle,
 }
 impl<'a> ElevatorWidget<'a> {
-    pub fn new(object: &'a mut ElevatorObject, size: Vec2) -> Self {
+    pub fn new(
+        object: &'a mut ElevatorObject,
+        size: Vec2,
+        green_light: &'a TextureHandle,
+        red_light: &'a TextureHandle,
+    ) -> Self {
         Self {
             object,
-            door: false,
             size,
+            green_light,
+            red_light,
+        }
+    }
+    fn get_texture_for_status(&self) -> egui::TextureId {
+        match self.object.status {
+            ActionStatus::Up => self.green_light.id(),
+            ActionStatus::Down => self.red_light.id(),
+            ActionStatus::Stop | ActionStatus::Idle => self.object.texture_id(),
         }
     }
 }
@@ -27,7 +40,7 @@ impl<'a> Widget for ElevatorWidget<'a> {
         let painter = ui.painter();
         if response.clicked() {};
 
-        let image = self.object.texture_id();
+        let image = self.get_texture_for_status();
         painter.image(
             image,
             rect,
